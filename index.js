@@ -3,6 +3,7 @@ import "dotenv/config";
 import cors from "cors";
 import { MongoClient, ObjectId } from "mongodb";
 const app = express();
+app.use(express.json());
 app.use(cors());
 const port = 5000;
 
@@ -21,6 +22,7 @@ export async function connectToMongoDB() {
 const mongoClient = await connectToMongoDB();
 const db = mongoClient.db("volunteer_hub");
 const opportunityCollection = db.collection("opportunities");
+const eventsCollection = db.collection("events");
 
 app.get("/", (req, res) => {
   res.send("Hello World!");
@@ -32,35 +34,54 @@ app.get("/opportunities", async (req, res) => {
 });
 
 app.get("/opportunities/:id", async (req, res) => {
+  const { id } = req.params;
+  const opportunity = await opportunityCollection.findOne({
+    _id: new ObjectId(id),
+  });
+  res.json(opportunity);
+});
+
+app.post("/opportunities", async (req, res) => {
   try {
-    const { id } = req.params;
+    const result = await opportunityCollection.insertOne(req.body);
 
-    console.log("Backend ID:", id);
+    res.status(201).json({
+      success: true,
+      insertedId: result.insertedId,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+});
+app.post("/manage-events", async (req, res) => {
+  try {
+    const event = req.body;
 
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({
-        message: "Invalid ID",
-      });
-    }
-
-    const opportunity = await opportunityCollection.findOne({
-      _id: new ObjectId(id),
+    const result = await eventsCollection.insertOne({
+      ...event,
+      registeredAt: new Date(),
     });
 
-    if (!opportunity) {
-      return res.status(404).json({
-        message: "Opportunity not found",
-      });
-    }
-
-    res.json(opportunity);
+    res.status(201).send({
+      ok: true,
+      message: "Event joined successfully",
+      insertedId: result.insertedId,
+    });
   } catch (error) {
     console.error(error);
 
-    res.status(500).json({
-      message: "Internal server error",
+    res.send({
+      ok: false,
+      message: "Failed to join event",
     });
   }
+});
+
+app.get("/manage-events/:email", async (req, res) => {
+  const { email } = req.params;
+  const result = await eventsCollection.find({ email: email }).toArray();
+  res.send(result);
 });
 
 app.listen(port, () => {
