@@ -1,4 +1,3 @@
-
 import express from "express";
 import "dotenv/config";
 import cors from "cors";
@@ -78,9 +77,7 @@ app.get("/manage-events/:email", async (req, res) => {
   try {
     const { email } = req.params;
 
-    const result = await opportunityCollection
-      .find({ email: email })
-      .toArray();
+    const result = await opportunityCollection.find({ email: email }).toArray();
 
     res.json(result);
   } catch (error) {
@@ -139,9 +136,7 @@ app.get("/manage-events/:email", async (req, res) => {
   try {
     const { email } = req.params;
 
-    const result = await myEventsCollection
-      .find({ email: email })
-      .toArray();
+    const result = await myEventsCollection.find({ email: email }).toArray();
 
     res.json(result);
   } catch (error) {
@@ -187,3 +182,5 @@ app.delete("/manage-events/:id", async (req, res) => {
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
+
+export default app;
