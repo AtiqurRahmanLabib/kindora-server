@@ -1,8 +1,8 @@
+
 import express from "express";
 import "dotenv/config";
 import cors from "cors";
 import { MongoClient, ObjectId } from "mongodb";
-import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const app = express();
 
@@ -33,55 +33,11 @@ const db = mongoClient.db("volunteer_hub");
 const opportunityCollection = db.collection("opportunities");
 const joinedEventsCollection = db.collection("joinedEvents");
 
-// JWT public keys
-const JWKS = createRemoteJWKSet(
-  new URL(`${process.env.CLIENT_BASE_URL}/api/auth/jwks`),
-);
-
 // Prevent duplicate registrations
 await joinedEventsCollection.createIndex(
   { email: 1, eventId: 1 },
   { unique: true },
 );
-
-// Verify JWT
-const verifyUser = async (req, res, next) => {
-  const authentication = req.headers.authorization;
-
-  if (!authentication) {
-    return res.status(401).json({
-      message: "Unauthorized",
-    });
-  }
-
-  const [scheme, token] = authentication.split(" ");
-
-  if (scheme !== "Bearer" || !token) {
-    return res.status(401).json({
-      message: "Invalid authorization format",
-    });
-  }
-
-  try {
-    const { payload } = await jwtVerify(token, JWKS);
-
-    if (!payload.email) {
-      return res.status(403).json({
-        message: "User email not found in JWT",
-      });
-    }
-
-    req.user = payload;
-
-    next();
-  } catch (error) {
-    console.error("JWT Verification Failed:", error);
-
-    return res.status(401).json({
-      message: "Invalid or expired token",
-    });
-  }
-};
 
 // Home route
 app.get("/", (req, res) => {
@@ -127,7 +83,7 @@ app.get("/opportunities/:id", async (req, res) => {
 });
 
 // Create event
-app.post("/opportunities", verifyUser, async (req, res) => {
+app.post("/opportunities", async (req, res) => {
   try {
     const event = req.body;
 
@@ -140,7 +96,6 @@ app.post("/opportunities", verifyUser, async (req, res) => {
 
     const result = await opportunityCollection.insertOne({
       ...event,
-      email: req.user.email,
       participants: 0,
       createdAt: new Date(),
     });
@@ -161,18 +116,12 @@ app.post("/opportunities", verifyUser, async (req, res) => {
 });
 
 // Get events created by user
-app.get("/manage-events/:email", verifyUser, async (req, res) => {
+app.get("/manage-events/:email", async (req, res) => {
   try {
     const { email } = req.params;
 
-    if (email !== req.user.email) {
-      return res.status(403).json({
-        message: "You cannot access another user's events",
-      });
-    }
-
     const result = await opportunityCollection
-      .find({ email: req.user.email })
+      .find({ email })
       .toArray();
 
     res.json(result);
@@ -186,7 +135,7 @@ app.get("/manage-events/:email", verifyUser, async (req, res) => {
 });
 
 // Delete event created by user
-app.delete("/manage-events/:id", verifyUser, async (req, res) => {
+app.delete("/manage-events/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -198,12 +147,11 @@ app.delete("/manage-events/:id", verifyUser, async (req, res) => {
 
     const result = await opportunityCollection.deleteOne({
       _id: new ObjectId(id),
-      email: req.user.email,
     });
 
     if (result.deletedCount === 0) {
       return res.status(404).json({
-        message: "Event not found or you are not the owner",
+        message: "Event not found",
       });
     }
 
@@ -225,15 +173,14 @@ app.delete("/manage-events/:id", verifyUser, async (req, res) => {
 });
 
 // Join an event
-app.post("/joined-events", verifyUser, async (req, res) => {
+app.post("/joined-events", async (req, res) => {
   try {
-    const { eventId, name } = req.body;
-    const email = req.user.email;
+    const { eventId, name, email } = req.body;
 
-    if (!eventId) {
+    if (!eventId || !email) {
       return res.status(400).json({
         success: false,
-        message: "Event ID is required",
+        message: "Event ID and email are required",
       });
     }
 
@@ -311,18 +258,12 @@ app.post("/joined-events", verifyUser, async (req, res) => {
 });
 
 // Get events joined by user
-app.get("/joined-events/:email", verifyUser, async (req, res) => {
+app.get("/joined-events/:email", async (req, res) => {
   try {
     const { email } = req.params;
 
-    if (email !== req.user.email) {
-      return res.status(403).json({
-        message: "You cannot access another user's joined events",
-      });
-    }
-
     const result = await joinedEventsCollection
-      .find({ email: req.user.email })
+      .find({ email })
       .sort({ joinedAt: -1 })
       .toArray();
 
